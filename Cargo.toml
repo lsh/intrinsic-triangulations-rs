@@ -1,0 +1,16 @@
+[package]
+name = "intrinsic-triangles"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+
+# For the course
+nalgebra = "0.29"
+nalgebra-sparse = "0.5"
+
+# For loading obj files
+tobj = "3.2"
