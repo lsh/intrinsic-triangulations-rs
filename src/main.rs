@@ -35,6 +35,7 @@ fn main() {
 
     println!("-- PEGASUS MODEL");
 
+    let source_vert = 1669;
     let (models, _) = tobj::load_obj("pegasus.obj", &tobj::LoadOptions::default())
         .expect("Failed to load OBJ file");
     if let Some(model) = models.first() {
@@ -66,5 +67,15 @@ fn main() {
         flip_to_delaunay(&mut f_delaunay, &mut g_delaunay, &mut l_delaunay);
         println!("After Delaunay flips:");
         print_info(&f_delaunay, &g_delaunay, &l_delaunay);
+        let dist_before = heat_method_distance_from_vertex(&f, &l, source_vert);
+        let dist_after = heat_method_distance_from_vertex(&f_delaunay, &l_delaunay, source_vert);
+        let dist_before_slice = dist_before.as_slice();
+        let dist_after_slice = dist_after.as_slice();
+        let mut heatcsv = String::from("dist_before,dist_after\n");
+        for i in 0..dist_after_slice.len() {
+            let data = format!("{},{}\n", dist_before_slice[i], dist_after_slice[i]);
+            heatcsv.push_str(&data);
+        }
+        std::fs::write("distance.csv", &heatcsv).unwrap();
     }
 }
