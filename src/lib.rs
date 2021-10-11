@@ -2,13 +2,17 @@
 /// [Geometry Processing with Intrinsic Triangulations course](https://github.com/nmwsharp/intrinsic-triangulations-tutorial)
 /// by [Nicholas Sharp](https://nmwsharp.com/), [Mark Gillespie](https://markjgillespie.com/), [Keenan Crane](http://keenan.is/here).
 /// For a better understanding of the content, please watch the course and view the course repo.
-use nalgebra::{DMatrix, DVector, Vector2};
-use nalgebra_sparse::{convert::serial::convert_csr_dense, csr::CsrMatrix, CooMatrix};
-use std::collections::{HashMap, VecDeque};
+use ndarray::prelude::*;
+use ndarray::Array;
+use ndarray_linalg::Norm;
+use sprs::CsMat;
+// use sprs_ldl::*;
+use std::collections::VecDeque;
 
+pub type Index = usize;
 /// A useful way to describe the face tuple
 /// Represents (face_index, face_side)
-pub type FaceSide = (usize, usize);
+pub type FaceSide = (Index, Index);
 
 pub trait NextSide {
     fn next(self) -> Self;
@@ -17,7 +21,8 @@ pub trait NextSide {
 /// Returns the next face in a triangle
 impl NextSide for FaceSide {
     fn next(self) -> Self {
-        (self.0, (self.1 + 1) % 3)
+        let (f, s) = self;
+        (f, (s + 1) % 3)
     }
 }
 
@@ -26,24 +31,26 @@ impl NextSide for FaceSide {
 /// # Arguments
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
 /// * `fs` - A face side formatted as (face_index, face_side)
-pub fn other(g: &DMatrix<FaceSide>, fs: FaceSide) -> FaceSide {
-    g[fs]
+pub fn other(g: &Array<Index, Ix3>, fs: FaceSide) -> FaceSide {
+    let (f, s) = fs;
+    let fs_out = g.slice(s![f, s, 0..2]);
+    (fs_out[0], fs_out[1])
 }
 
 /// Returns the number of faces in the face matrix
 ///
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
-pub fn n_faces(f: &DMatrix<i64>) -> usize {
-    f.shape().0
+pub fn n_faces(f: &Array<Index, Ix2>) -> usize {
+    f.shape()[0]
 }
 
 /// Returns the number of vertices in the face matrix
 ///
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
-pub fn n_verts(f: &DMatrix<i64>) -> i64 {
-    f.amax() + 1
+pub fn n_verts(f: &Array<Index, Ix2>) -> Index {
+    f.fold(0, |acc, x| acc.max(*x)) + 1
 }
 
 /// Returns the area of a given face
@@ -51,10 +58,11 @@ pub fn n_verts(f: &DMatrix<i64>) -> i64 {
 /// # Arguments
 /// * `l` - An |Fx3| matrix of face side lengths
 /// * `f` - An |Fx3| matrix of face indices
-pub fn face_area(l: &DMatrix<f64>, f: usize) -> f64 {
-    let a = l[(f, 0)];
-    let b = l[(f, 1)];
-    let c = l[(f, 2)];
+pub fn face_area(l: &Array<f64, Ix2>, f: usize) -> f64 {
+    let lf = l.slice(s![f, ..]);
+    let a = lf[0];
+    let b = lf[1];
+    let c = lf[2];
     let s = (a + b + c) / 2.0;
     let d = s * (s - a) * (s - b) * (s - c);
     d.sqrt()
@@ -65,7 +73,7 @@ pub fn face_area(l: &DMatrix<f64>, f: usize) -> f64 {
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn surface_area(f: &DMatrix<i64>, l: &DMatrix<f64>) -> f64 {
+pub fn surface_area(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> f64 {
     (0..n_faces(f)).map(|i| face_area(l, i)).sum()
 }
 
@@ -74,7 +82,7 @@ pub fn surface_area(f: &DMatrix<i64>, l: &DMatrix<f64>) -> f64 {
 /// # Arguments
 /// * `l` - An |Fx3| matrix of face side lengths
 /// * `fs` - A face side formatted as (face_index, face_side)
-pub fn opposite_corner_angle(l: &DMatrix<f64>, fs: FaceSide) -> f64 {
+pub fn opposite_corner_angle(l: &Array<f64, Ix2>, fs: FaceSide) -> f64 {
     let a = l[fs];
     let b = l[fs.next()];
     let c = l[fs.next().next()];
@@ -87,7 +95,7 @@ pub fn opposite_corner_angle(l: &DMatrix<f64>, fs: FaceSide) -> f64 {
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
 /// * `l` - An |Fx3| matrix of face side lengths
 /// * `fs` - A face side formatted as (face_index, face_side)
-pub fn diagonal_length(g: &DMatrix<FaceSide>, l: &DMatrix<f64>, fs: FaceSide) -> f64 {
+pub fn diagonal_length(g: &Array<Index, Ix3>, l: &Array<f64, Ix2>, fs: FaceSide) -> f64 {
     let fs_other = other(g, fs);
     let u = l[fs.next().next()];
     let v = l[fs_other.next()];
@@ -104,7 +112,7 @@ pub fn diagonal_length(g: &DMatrix<FaceSide>, l: &DMatrix<f64>, fs: FaceSide) ->
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
 /// * `l` - An |Fx3| matrix of face side lengths
 /// * `fs` - A face side formatted as (face_index, face_side)
-pub fn is_delaunay(g: &DMatrix<FaceSide>, l: &DMatrix<f64>, fs: FaceSide) -> bool {
+pub fn is_delaunay(g: &Array<Index, Ix3>, l: &Array<f64, Ix2>, fs: FaceSide) -> bool {
     let fs_other = other(g, fs);
     let theta_a = opposite_corner_angle(l, fs);
     let theta_b = opposite_corner_angle(l, fs_other);
@@ -116,13 +124,13 @@ pub fn is_delaunay(g: &DMatrix<FaceSide>, l: &DMatrix<f64>, fs: FaceSide) -> boo
 /// # Arguments
 /// * `v` - An |Fx3| matrix of vertex positions
 /// * `f` - An |Fx3| matrix of face indices
-pub fn build_edge_lengths(v: &DMatrix<f64>, f: &DMatrix<i64>) -> DMatrix<f64> {
-    let mut l = DMatrix::from_element(n_faces(f), 3, 0.);
+pub fn build_edge_lengths(v: &Array<f64, Ix2>, f: &Array<Index, Ix2>) -> Array<f64, Ix2> {
+    let mut l = Array::<f64, _>::zeros((n_faces(f), 3));
     for fi in 0..n_faces(f) {
         for s in 0..3 {
             let i = f[(fi, s)] as usize;
             let j = f[(fi, s).next()] as usize;
-            let length = v.row(j) - v.row(i);
+            let length = v.row(j).to_owned() - v.row(i).to_owned();
             let length = length.norm();
             l[(fi, s)] = length;
         }
@@ -136,9 +144,13 @@ pub fn build_edge_lengths(v: &DMatrix<f64>, f: &DMatrix<i64>) -> DMatrix<f64> {
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
 /// * `fs1` - A face side formatted as (face_index, face_side)
 /// * `fs2` - A face side formatted as (face_index, face_side)
-pub fn glue_together(g: &mut DMatrix<FaceSide>, fs1: FaceSide, fs2: FaceSide) {
-    g[fs1] = fs2;
-    g[fs2] = fs1;
+pub fn glue_together(g: &mut Array<Index, Ix3>, fs1: FaceSide, fs2: FaceSide) {
+    let (f1, s1) = fs1;
+    let (f2, s2) = fs2;
+    let f1array = array![f1, s1];
+    let f2array = array![f2, s2];
+    g.slice_mut(s![f1, s1, ..]).assign(&f2array);
+    g.slice_mut(s![f2, s2, ..]).assign(&f1array);
 }
 
 /// Tests whether the gluing map was successfully constructed.
@@ -146,7 +158,7 @@ pub fn glue_together(g: &mut DMatrix<FaceSide>, fs1: FaceSide, fs2: FaceSide) {
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
-pub fn validate_gluing_map(f: &DMatrix<i64>, g: &DMatrix<FaceSide>) {
+pub fn validate_gluing_map(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>) {
     for fi in 0..n_faces(f) {
         for s in 0..3 {
             let fs = (fi, s);
@@ -166,7 +178,7 @@ pub fn validate_gluing_map(f: &DMatrix<i64>, g: &DMatrix<FaceSide>) {
 ///
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
-pub fn build_gluing_map(f: &DMatrix<i64>) -> DMatrix<FaceSide> {
+pub fn build_gluing_map(f: &Array<Index, Ix2>) -> Array<Index, Ix3> {
     let mut s = (0..n_faces(f))
         .flat_map(|fi| {
             (0..3)
@@ -181,7 +193,7 @@ pub fn build_gluing_map(f: &DMatrix<i64>) -> DMatrix<FaceSide> {
     s.sort();
 
     let n_sides = 3 * n_faces(f);
-    let mut g = DMatrix::from_element(n_faces(f), 3, (0, 0));
+    let mut g = Array::<Index, Ix3>::zeros((n_faces(f), 3, 2));
     for p in (0..n_sides).step_by(2) {
         if s[p].0 != s[p + 1].0 || s[p].1 != s[p + 1].1 {
             panic!("Problem building glue map. Is input closed & manifold?");
@@ -204,9 +216,9 @@ pub fn build_gluing_map(f: &DMatrix<i64>) -> DMatrix<FaceSide> {
 /// * `l` - An |Fx3| matrix of face side lengths
 /// * `s0` - A face side formatted as (face_index, face_side)
 pub fn flip_edge(
-    f: &mut DMatrix<i64>,
-    g: &mut DMatrix<FaceSide>,
-    l: &mut DMatrix<f64>,
+    f: &mut Array<Index, Ix2>,
+    g: &mut Array<Index, Ix3>,
+    l: &mut Array<f64, Ix2>,
     s0: FaceSide,
 ) -> FaceSide {
     let s1 = other(g, s0);
@@ -225,8 +237,8 @@ pub fn flip_edge(
     let v2 = f[s3];
     let v3 = f[s5];
 
-    let f0 = s0.0;
-    let f1 = s1.0;
+    let (f0, _) = s0;
+    let (f1, _) = s1;
 
     let l2 = l[s2];
     let l3 = l[s3];
@@ -275,7 +287,11 @@ pub fn flip_edge(
 /// * `f` - An |Fx3| matrix of face indices
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn flip_to_delaunay(f: &mut DMatrix<i64>, g: &mut DMatrix<FaceSide>, l: &mut DMatrix<f64>) {
+pub fn flip_to_delaunay(
+    f: &mut Array<Index, Ix2>,
+    g: &mut Array<Index, Ix3>,
+    l: &mut Array<f64, Ix2>,
+) {
     let mut to_process: VecDeque<FaceSide> = VecDeque::new();
     for fi in 0..n_faces(f) {
         for s in 0..3 {
@@ -300,7 +316,7 @@ pub fn flip_to_delaunay(f: &mut DMatrix<i64>, g: &mut DMatrix<FaceSide>, l: &mut
 /// * `f` - An |Fx3| matrix of face indices
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn check_delaunay(f: &DMatrix<i64>, g: &DMatrix<FaceSide>, l: &DMatrix<f64>) -> bool {
+pub fn check_delaunay(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>, l: &Array<f64, Ix2>) -> bool {
     for i in 0..n_faces(f) {
         for s in 0..3 {
             if !is_delaunay(g, l, (i, s)) {
@@ -316,33 +332,24 @@ pub fn check_delaunay(f: &DMatrix<i64>, g: &DMatrix<FaceSide>, l: &DMatrix<f64>)
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn build_cotan_laplacian(f: &DMatrix<i64>, l: &DMatrix<f64>) -> CsrMatrix<f64> {
-    let n = n_verts(f) as usize;
-    let mut map: HashMap<FaceSide, f64> = HashMap::new();
+pub fn build_cotan_laplacian(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> CsMat<f64> {
+    let n = n_verts(f);
+    let mut ll = Array::<f64, _>::zeros((n, n));
     for fi in 0..n_faces(f) {
         for s in 0..3 {
             let fs = (fi, s);
-            let i = f[fs] as usize;
-            let j = f[fs.next()] as usize;
+            let i = f[fs];
+            let j = f[fs.next()];
             let opp_theta = opposite_corner_angle(l, fs);
             let opp_cotan = 1.0 / opp_theta.tan();
             let cotan_weight = 0.5 * opp_cotan;
-            let ij = map.entry((i, j)).or_insert(0.0);
-            *ij -= cotan_weight;
-            let ji = map.entry((j, i)).or_insert(0.0);
-            *ji -= cotan_weight;
-            let ii = map.entry((i, i)).or_insert(0.0);
-            *ii += cotan_weight;
-            let jj = map.entry((j, j)).or_insert(0.0);
-            *jj += cotan_weight;
+            ll[(i, j)] -= cotan_weight;
+            ll[(j, i)] -= cotan_weight;
+            ll[(i, i)] += cotan_weight;
+            ll[(j, j)] += cotan_weight;
         }
     }
-    let mut coo = CooMatrix::new(n, n);
-    for (fs, value) in map {
-        let (f, s) = fs;
-        coo.push(f, s, value);
-    }
-    CsrMatrix::from(&coo)
+    CsMat::csc_from_dense(ll.view(), f64::EPSILON)
 }
 
 /// Returns a lumped mass matrix stored as a |V|x|V| CsrMatrix<f64>.
@@ -350,22 +357,17 @@ pub fn build_cotan_laplacian(f: &DMatrix<i64>, l: &DMatrix<f64>) -> CsrMatrix<f6
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn build_lumped_mass(f: &DMatrix<i64>, l: &DMatrix<f64>) -> CsrMatrix<f64> {
-    let n = n_verts(f) as usize;
-    let mut map: HashMap<usize, f64> = HashMap::new();
+pub fn build_lumped_mass(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> CsMat<f64> {
+    let n = n_verts(f);
+    let mut m = Array::<f64, _>::zeros((n, n));
     for fi in 0..n_faces(f) {
         let area = face_area(l, fi);
         for s in 0..3 {
-            let i = f[(fi, s)] as usize;
-            let mi = map.entry(i).or_insert(0.0);
-            *mi += area / 3.0;
+            let i = f[(fi, s)];
+            m[(i, i)] += area / 3.0;
         }
     }
-    let mut coo = CooMatrix::new(n, n);
-    for (i, value) in map {
-        coo.push(i, i, value);
-    }
-    CsrMatrix::from(&coo)
+    CsMat::csr_from_dense(m.view(), f64::EPSILON)
 }
 
 /// Returns a Vector2<f64> representing a corresponding edge in the supplied face.
@@ -373,25 +375,18 @@ pub fn build_lumped_mass(f: &DMatrix<i64>, l: &DMatrix<f64>) -> CsrMatrix<f64> {
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
 /// * `fs` - A face side formatted as (face_index, face_side)
-pub fn edge_in_face_basis(l: &DMatrix<f64>, fs: FaceSide) -> Vector2<f64> {
+pub fn edge_in_face_basis(l: &Array<f64, Ix2>, fs: FaceSide) -> Array<f64, Ix1> {
     let (f, s) = fs;
     let theta = opposite_corner_angle(l, (f, 1));
 
-    let local_vert_positions = DMatrix::from_row_slice(
-        3,
-        2,
-        &[
-            0.0,
-            0.0,
-            l[(f, 0)],
-            0.0,
-            theta.cos() * l[(f, 2)],
-            theta.sin() * l[(f, 2)],
-        ],
-    );
-    let edge_vec = local_vert_positions.row((s + 1) % 3) - local_vert_positions.row(s);
-    let v = edge_vec.as_slice();
-    Vector2::new(v[0], v[1])
+    let local_vert_positions = array![
+        [0.0, 0.0],
+        [l[(f, 0)], 0.0,],
+        [theta.cos() * l[(f, 2)], theta.sin() * l[(f, 2)],],
+    ];
+    let edge_vec =
+        local_vert_positions.row((s + 1) % 3).to_owned() - local_vert_positions.row(s).to_owned();
+    edge_vec
 }
 
 /// Returns a matrix representing a the gradient for each face.
@@ -399,25 +394,24 @@ pub fn edge_in_face_basis(l: &DMatrix<f64>, fs: FaceSide) -> Vector2<f64> {
 /// # Arguments
 /// * `f` - An |F|x3 matrix of face indices
 /// * `l` - An |F|x3 matrix of face side lengths
-/// * `x` - An |F|x2 matrix of gradient vectors per-face
+/// * `x` - An |F| matrix of gradient vectors per-face
 pub fn evaluate_gradient_at_faces(
-    f: &DMatrix<i64>,
-    l: &DMatrix<f64>,
-    x: &DVector<f64>,
-) -> DMatrix<f64> {
-    let mut grads = DMatrix::from_element(n_faces(f), 2, 0.0);
+    f: &Array<Index, Ix2>,
+    l: &Array<f64, Ix2>,
+    x: &Array<f64, Ix1>,
+) -> Array<f64, Ix2> {
+    let mut grads = Array::<f64, _>::zeros((n_faces(f), 2));
     for fi in 0..n_faces(f) {
-        let mut face_grad = Vector2::new(0.0, 0.0);
+        let mut face_grad = array![0., 0.];
         for s in 0..3 {
-            let i = f[(fi, s)] as usize;
+            let i = f[(fi, s)];
             let edge_vec = edge_in_face_basis(l, (fi, s).next());
-            let edge_vec_rot = Vector2::new(-edge_vec.y, edge_vec.x);
-            face_grad += x[i] * edge_vec_rot;
+            let edge_vec_rot = array![-edge_vec[1], edge_vec[0]];
+            face_grad = face_grad + x[i] * edge_vec_rot;
         }
         let area = face_area(l, fi);
         face_grad /= 2.0 * area;
-        grads[(fi, 0)] = face_grad.x;
-        grads[(fi, 1)] = face_grad.y;
+        grads.slice_mut(s![fi, ..]).assign(&face_grad);
     }
     grads
 }
@@ -429,17 +423,17 @@ pub fn evaluate_gradient_at_faces(
 /// * `l` - An |F|x3 matrix of face side lengths
 /// * `v` - An |F|x2 matrix of vectors per-face
 pub fn evaluate_divergence_at_vertices(
-    f: &DMatrix<i64>,
-    l: &DMatrix<f64>,
-    v: &DMatrix<f64>,
-) -> DVector<f64> {
-    let mut divs = DVector::from_element(n_verts(f) as usize, 0.0);
+    f: &Array<Index, Ix2>,
+    l: &Array<f64, Ix2>,
+    v: &Array<f64, Ix2>,
+) -> Array<f64, Ix1> {
+    let mut divs = Array::<f64, Ix1>::zeros(n_verts(f));
     for fi in 0..n_faces(f) {
-        let grad_vec = Vector2::new(v[(fi, 0)], v[(fi, 1)]);
+        let grad_vec = v.row(fi);
         for s in 0..3 {
             let fs = (fi, s);
-            let i = f[fs] as usize;
-            let j = f[fs.next()] as usize;
+            let i = f[fs];
+            let j = f[fs.next()];
             let edge_vec = edge_in_face_basis(l, fs);
             let opp_theta = opposite_corner_angle(l, fs);
             let opp_cotan = 1.0 / opp_theta.tan();
@@ -459,37 +453,38 @@ pub fn evaluate_divergence_at_vertices(
 /// * `l` - An |F|x3 matrix of face side lengths
 /// * `source_vert` - The index of a vertex to use as a source
 pub fn heat_method_distance_from_vertex(
-    f: &DMatrix<i64>,
-    l: &DMatrix<f64>,
-    source_vert: i64,
-) -> DVector<f64> {
+    f: &Array<Index, Ix2>,
+    l: &Array<f64, Ix2>,
+    source_vert: usize,
+) -> Array<f64, Ix1> {
     let ll = build_cotan_laplacian(f, l);
     let m = build_lumped_mass(f, l);
 
-    let mean_edge_length = l.mean();
+    let mean_edge_length = l.mean().unwrap();
     let short_time = mean_edge_length.powi(2);
 
-    let h = m + short_time * ll.clone();
-    let mut init_rhs = DVector::from_element(n_verts(f) as usize, 0.0);
-    init_rhs[source_vert as usize] = 1.0;
-    let heat = convert_csr_dense(&h).lu().solve(&init_rhs).unwrap();
-    let mut grads = evaluate_gradient_at_faces(f, l, &heat);
-    let norms = (0..grads.shape().0)
+    let h = &m + &ll.map(|v| *v * short_time);
+
+    let mut init_rhs = Array::<f64, Ix1>::zeros(n_verts(f));
+    init_rhs[source_vert] = 1.0;
+    sprs_ldl::ldl_lsolve(&h.view(), &mut init_rhs);
+    let mut grads = evaluate_gradient_at_faces(f, l, &init_rhs);
+    let norms = (0..grads.shape()[0])
         .map(|i| grads.row(i).norm())
         .collect::<Vec<_>>();
 
-    for i in 0..grads.shape().0 {
-        let g = grads.row(i) / norms[i];
-        grads.set_row(i, &g);
+    for i in 0..grads.shape()[0] {
+        let norm = if norms[i] == 0. { 1.0 } else { norms[i] };
+        let g = grads.row(i).to_owned() / norm;
+        grads.slice_mut(s![i, ..]).assign(&g);
     }
 
-    let div = evaluate_divergence_at_vertices(f, l, &grads);
-    let dist = ll.clone() + CsrMatrix::identity(ll.ncols()) * 1e-6;
-    let mut dist = convert_csr_dense(&dist).lu().solve(&div).unwrap();
-    let k = dist[source_vert as usize];
-    for i in 0..dist.shape().0 {
-        dist[i] -= k;
-    }
+    let mut dist = evaluate_divergence_at_vertices(f, l, &grads);
+    let ident = CsMat::<f64>::eye(ll.shape().0);
+    let ident = &ll + &ident.map(|i| *i * 1e-6);
+    sprs_ldl::ldl_lsolve(&ident.view(), &mut dist);
+    let k = dist[source_vert];
+    dist = dist - k;
     dist
 }
 
@@ -499,7 +494,7 @@ pub fn heat_method_distance_from_vertex(
 /// * `f` - An |Fx3| matrix of face indices
 /// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn print_info(f: &DMatrix<i64>, g: &DMatrix<FaceSide>, l: &DMatrix<f64>) {
+pub fn print_info(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>, l: &Array<f64, Ix2>) {
     println!("n_verts = {}", n_verts(f));
     println!("n_faces = {}", n_faces(f));
     println!("surface_area = {}", surface_area(f, l));
