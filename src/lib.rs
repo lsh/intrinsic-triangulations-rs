@@ -29,7 +29,7 @@ impl NextSide for FaceSide {
 /// Returns the face glued to the supplied face
 ///
 /// # Arguments
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
 /// * `fs` - A face side formatted as (face_index, face_side)
 pub fn other(g: &Array<Index, Ix3>, fs: FaceSide) -> FaceSide {
     let (f, s) = fs;
@@ -40,7 +40,7 @@ pub fn other(g: &Array<Index, Ix3>, fs: FaceSide) -> FaceSide {
 /// Returns the number of faces in the face matrix
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
+/// * `f` - An |F|x3 matrix of face indices
 pub fn n_faces(f: &Array<Index, Ix2>) -> usize {
     f.shape()[0]
 }
@@ -48,7 +48,7 @@ pub fn n_faces(f: &Array<Index, Ix2>) -> usize {
 /// Returns the number of vertices in the face matrix
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
+/// * `f` - An |F|x3 matrix of face indices
 pub fn n_verts(f: &Array<Index, Ix2>) -> Index {
     f.fold(0, |acc, x| acc.max(*x)) + 1
 }
@@ -56,8 +56,8 @@ pub fn n_verts(f: &Array<Index, Ix2>) -> Index {
 /// Returns the area of a given face
 ///
 /// # Arguments
-/// * `l` - An |Fx3| matrix of face side lengths
-/// * `f` - An |Fx3| matrix of face indices
+/// * `l` - An |F|x3 matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
 pub fn face_area(l: &Array<f64, Ix2>, f: usize) -> f64 {
     let lf = l.slice(s![f, ..]);
     let a = lf[0];
@@ -71,8 +71,8 @@ pub fn face_area(l: &Array<f64, Ix2>, f: usize) -> f64 {
 /// Returns the surface area of a given mesh
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
+/// * `l` - An |F|x3 matrix of face side lengths
 pub fn surface_area(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> f64 {
     (0..n_faces(f)).map(|i| face_area(l, i)).sum()
 }
@@ -80,7 +80,7 @@ pub fn surface_area(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> f64 {
 /// Returns the opposite corner angle of a given face side
 ///
 /// # Arguments
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `l` - An |F|x3 matrix of face side lengths
 /// * `fs` - A face side formatted as (face_index, face_side)
 pub fn opposite_corner_angle(l: &Array<f64, Ix2>, fs: FaceSide) -> f64 {
     let a = l[fs];
@@ -92,8 +92,8 @@ pub fn opposite_corner_angle(l: &Array<f64, Ix2>, fs: FaceSide) -> f64 {
 /// Returns the length of the diagonal of a given face side
 ///
 /// # Arguments
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
+/// * `l` - An |F|x3 matrix of face side lengths
 /// * `fs` - A face side formatted as (face_index, face_side)
 pub fn diagonal_length(g: &Array<Index, Ix3>, l: &Array<f64, Ix2>, fs: FaceSide) -> f64 {
     let fs_other = other(g, fs);
@@ -109,8 +109,8 @@ pub fn diagonal_length(g: &Array<Index, Ix3>, l: &Array<f64, Ix2>, fs: FaceSide)
 /// Returns a boolean of whether a given face is a delaunay triangulation.
 ///
 /// # Arguments
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
+/// * `l` - An |F|x3 matrix of face side lengths
 /// * `fs` - A face side formatted as (face_index, face_side)
 pub fn is_delaunay(g: &Array<Index, Ix3>, l: &Array<f64, Ix2>, fs: FaceSide) -> bool {
     let fs_other = other(g, fs);
@@ -119,11 +119,11 @@ pub fn is_delaunay(g: &Array<Index, Ix3>, l: &Array<f64, Ix2>, fs: FaceSide) -> 
     theta_a + theta_b <= std::f64::consts::PI + std::f64::EPSILON
 }
 
-/// Returns an |Fx3| matrix of f64 values representing the lengths of face edges.
+/// Returns an |F|x3 matrix of f64 values representing the lengths of face edges.
 ///
 /// # Arguments
-/// * `v` - An |Fx3| matrix of vertex positions
-/// * `f` - An |Fx3| matrix of face indices
+/// * `v` - An |F|x3 matrix of vertex positions
+/// * `f` - An |F|x3 matrix of face indices
 pub fn build_edge_lengths(v: &Array<f64, Ix2>, f: &Array<Index, Ix2>) -> Array<f64, Ix2> {
     let mut l = Array::<f64, _>::zeros((n_faces(f), 3));
     for fi in 0..n_faces(f) {
@@ -141,7 +141,7 @@ pub fn build_edge_lengths(v: &Array<f64, Ix2>, f: &Array<Index, Ix2>) -> Array<f
 /// Updates the gluing map so that fs1 and fs2 are glued together.
 ///
 /// # Arguments
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
 /// * `fs1` - A face side formatted as (face_index, face_side)
 /// * `fs2` - A face side formatted as (face_index, face_side)
 pub fn glue_together(g: &mut Array<Index, Ix3>, fs1: FaceSide, fs2: FaceSide) {
@@ -156,8 +156,8 @@ pub fn glue_together(g: &mut Array<Index, Ix3>, fs1: FaceSide, fs2: FaceSide) {
 /// Tests whether the gluing map was successfully constructed.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
+/// * `f` - An |F|x3 matrix of face indices
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
 pub fn validate_gluing_map(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>) {
     for fi in 0..n_faces(f) {
         for s in 0..3 {
@@ -174,10 +174,10 @@ pub fn validate_gluing_map(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>) {
     }
 }
 
-/// Returns an |Fx3| matrix of FaceSides representing the glue map of a mesh.
+/// Returns an |F|x3 matrix of FaceSides representing the glue map of a mesh.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
+/// * `f` - An |F|x3 matrix of face indices
 pub fn build_gluing_map(f: &Array<Index, Ix2>) -> Array<Index, Ix3> {
     let mut s = (0..n_faces(f))
         .flat_map(|fi| {
@@ -211,9 +211,9 @@ pub fn build_gluing_map(f: &Array<Index, Ix2>) -> Array<Index, Ix3> {
 /// Flip the edge of of a triangle. Returns a FaceSide that looks like (s0_face_index, 0).
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
+/// * `l` - An |F|x3 matrix of face side lengths
 /// * `s0` - A face side formatted as (face_index, face_side)
 pub fn flip_edge(
     f: &mut Array<Index, Ix2>,
@@ -284,9 +284,9 @@ pub fn flip_edge(
 /// Flip all the triangles in a matrix to delaunay.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
+/// * `l` - An |F|x3 matrix of face side lengths
 pub fn flip_to_delaunay(
     f: &mut Array<Index, Ix2>,
     g: &mut Array<Index, Ix3>,
@@ -313,9 +313,9 @@ pub fn flip_to_delaunay(
 /// Returns a boolean that asserts a matrix has been converted to a delaunay representation.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
+/// * `l` - An |F|x3 matrix of face side lengths
 pub fn check_delaunay(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>, l: &Array<f64, Ix2>) -> bool {
     for i in 0..n_faces(f) {
         for s in 0..3 {
@@ -330,8 +330,8 @@ pub fn check_delaunay(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>, l: &Array<f6
 /// Returns a cotan-Laplace matrix stored as a |V|x|V| CsrMatrix<f64>.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
+/// * `l` - An |F|x3 matrix of face side lengths
 pub fn build_cotan_laplacian(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> Array<f64, Ix2> {
     let n = n_verts(f);
     let mut ll = Array::<f64, _>::zeros((n, n));
@@ -355,8 +355,8 @@ pub fn build_cotan_laplacian(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> Arra
 /// Returns a lumped mass matrix stored as a |V|x|V| CsrMatrix<f64>.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
+/// * `l` - An |F|x3 matrix of face side lengths
 pub fn build_lumped_mass(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> Array<f64, Ix2> {
     let n = n_verts(f);
     let mut m = Array::<f64, _>::zeros((n, n));
@@ -373,7 +373,7 @@ pub fn build_lumped_mass(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> Array<f6
 /// Returns a Vector2<f64> representing a corresponding edge in the supplied face.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
+/// * `f` - An |F|x3 matrix of face indices
 /// * `fs` - A face side formatted as (face_index, face_side)
 pub fn edge_in_face_basis(l: &Array<f64, Ix2>, fs: FaceSide) -> Array<f64, Ix1> {
     let (f, s) = fs;
@@ -492,9 +492,9 @@ pub fn heat_method_distance_from_vertex(
 /// Print some information about the given data.
 ///
 /// # Arguments
-/// * `f` - An |Fx3| matrix of face indices
-/// * `g` - A glue map stored as an |Fx3| DMatrix of FaceSides
-/// * `l` - An |Fx3| matrix of face side lengths
+/// * `f` - An |F|x3 matrix of face indices
+/// * `g` - A glue map stored as an |F|x3 matrix of FaceSides
+/// * `l` - An |F|x3 matrix of face side lengths
 pub fn print_info(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>, l: &Array<f64, Ix2>) {
     println!("n_verts = {}", n_verts(f));
     println!("n_faces = {}", n_faces(f));
