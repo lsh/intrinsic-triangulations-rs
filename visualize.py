@@ -1,11 +1,12 @@
-import potpourri3d as pp3d
 import polyscope as ps
 import pandas as pd
 
 dists = pd.read_csv("distance.csv")
 dists_before = dists.iloc[:, 0].to_numpy()
 dists_after = dists.iloc[:, 1].to_numpy()
-(V, F) = pp3d.read_mesh("pegasus.obj")
+
+V = dists[["v0", "v1", "v2"]].to_numpy()
+F = pd.read_csv("faces.csv").to_numpy()
 
 ps.init()
 ps_mesh = ps.register_surface_mesh("Pegasus", V, F)

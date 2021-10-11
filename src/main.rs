@@ -1,9 +1,8 @@
 use intrinsic_triangles::*;
 use ndarray::prelude::*;
-use ndarray::Array;
 
 fn main() {
-    // let source_vert = 0;
+    let source_vert = 0;
     let v = array![
         [0., 5., 0.],
         [0., 1., -3.],
@@ -36,9 +35,11 @@ fn main() {
     println!("After Delaunay flips:");
     print_info(&f_delaunay, &g_delaunay, &l_delaunay);
     println!("");
-
+    let dist_before = heat_method_distance_from_vertex(&f, &l, source_vert);
+    println!("{:?}", dist_before);
+    let dist_after = heat_method_distance_from_vertex(&f_delaunay, &l_delaunay, source_vert);
+    println!("{:?}", dist_after);
     println!("-- PEGASUS MODEL");
-
     let source_vert = 1669;
     let (models, _) = tobj::load_obj("pegasus.obj", &tobj::LoadOptions::default())
         .expect("Failed to load OBJ file");
@@ -66,11 +67,24 @@ fn main() {
         println!("After Delaunay flips:");
         print_info(&f_delaunay, &g_delaunay, &l_delaunay);
         let dist_after = heat_method_distance_from_vertex(&f_delaunay, &l_delaunay, source_vert);
-        let mut heatcsv = String::from("dist_before,dist_after\n");
-        for i in 0..dist_after.shape()[0] {
-            let data = format!("{},{}\n", dist_before[i], dist_after[i]);
+        let mut heatcsv = String::from("dist_before,dist_after,v0,v1,v2\n");
+        for i in 0..v.shape()[0] {
+            let data = format!(
+                "{},{},{},{},{}\n",
+                dist_before[i],
+                dist_after[i],
+                v[[i, 0]],
+                v[[i, 1]],
+                v[[i, 2]]
+            );
             heatcsv.push_str(&data);
         }
+        let mut facecsv = String::from("f0,f1,f2\n");
+        for i in 0..f.shape()[0] {
+            let data = format!("{},{},{}\n", f[[i, 0]], f[[i, 1]], f[[i, 2]]);
+            facecsv.push_str(&data);
+        }
         std::fs::write("distance.csv", &heatcsv).unwrap();
+        std::fs::write("faces.csv", &facecsv).unwrap();
     }
 }

@@ -4,8 +4,8 @@
 /// For a better understanding of the content, please watch the course and view the course repo.
 use ndarray::prelude::*;
 use ndarray::Array;
-use ndarray_linalg::Norm;
-use sprs::CsMat;
+use ndarray_linalg::{cholesky::*, Norm};
+// use sprs::CsMat;
 // use sprs_ldl::*;
 use std::collections::VecDeque;
 
@@ -332,7 +332,7 @@ pub fn check_delaunay(f: &Array<Index, Ix2>, g: &Array<Index, Ix3>, l: &Array<f6
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn build_cotan_laplacian(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> CsMat<f64> {
+pub fn build_cotan_laplacian(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> Array<f64, Ix2> {
     let n = n_verts(f);
     let mut ll = Array::<f64, _>::zeros((n, n));
     for fi in 0..n_faces(f) {
@@ -349,7 +349,7 @@ pub fn build_cotan_laplacian(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> CsMa
             ll[(j, j)] += cotan_weight;
         }
     }
-    CsMat::csc_from_dense(ll.view(), f64::EPSILON)
+    ll
 }
 
 /// Returns a lumped mass matrix stored as a |V|x|V| CsrMatrix<f64>.
@@ -357,7 +357,7 @@ pub fn build_cotan_laplacian(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> CsMa
 /// # Arguments
 /// * `f` - An |Fx3| matrix of face indices
 /// * `l` - An |Fx3| matrix of face side lengths
-pub fn build_lumped_mass(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> CsMat<f64> {
+pub fn build_lumped_mass(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> Array<f64, Ix2> {
     let n = n_verts(f);
     let mut m = Array::<f64, _>::zeros((n, n));
     for fi in 0..n_faces(f) {
@@ -367,7 +367,7 @@ pub fn build_lumped_mass(f: &Array<Index, Ix2>, l: &Array<f64, Ix2>) -> CsMat<f6
             m[(i, i)] += area / 3.0;
         }
     }
-    CsMat::csr_from_dense(m.view(), f64::EPSILON)
+    m
 }
 
 /// Returns a Vector2<f64> representing a corresponding edge in the supplied face.
@@ -467,8 +467,9 @@ pub fn heat_method_distance_from_vertex(
 
     let mut init_rhs = Array::<f64, Ix1>::zeros(n_verts(f));
     init_rhs[source_vert] = 1.0;
-    sprs_ldl::ldl_lsolve(&h.view(), &mut init_rhs);
-    let mut grads = evaluate_gradient_at_faces(f, l, &init_rhs);
+    // sprs_ldl::ldl_lsolve(&h.view(), &mut init_rhs);
+    let heat = h.solvec(&init_rhs).unwrap();
+    let mut grads = evaluate_gradient_at_faces(f, l, &heat);
     let norms = (0..grads.shape()[0])
         .map(|i| grads.row(i).norm())
         .collect::<Vec<_>>();
@@ -479,12 +480,12 @@ pub fn heat_method_distance_from_vertex(
         grads.slice_mut(s![i, ..]).assign(&g);
     }
 
-    let mut dist = evaluate_divergence_at_vertices(f, l, &grads);
-    let ident = CsMat::<f64>::eye(ll.shape().0);
+    let divs = evaluate_divergence_at_vertices(f, l, &grads);
+    let ident = Array::<f64, _>::eye(ll.shape()[0]);
     let ident = &ll + &ident.map(|i| *i * 1e-6);
-    sprs_ldl::ldl_lsolve(&ident.view(), &mut dist);
+    let dist = ident.solvec(&divs).unwrap();
     let k = dist[source_vert];
-    dist = dist - k;
+    let dist = dist - k;
     dist
 }
 
