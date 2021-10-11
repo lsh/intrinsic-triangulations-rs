@@ -1,7 +1,7 @@
 [package]
 name = "intrinsic-triangles"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
 
 [lib]
 path = "src/lib.rs"
@@ -10,9 +10,6 @@ path = "src/lib.rs"
 
 # For the course
 ndarray = "0.15"
-ndarray-linalg = "0.14"
-sprs = { git = "https://github.com/vbarrielle/sprs/" }
-sprs-ldl = { git = "https://github.com/vbarrielle/sprs/" }
+ndarray-linalg = { version = "0.14", features = ["openblas-system"] }
 
-# For loading obj files
 tobj = "3.2"

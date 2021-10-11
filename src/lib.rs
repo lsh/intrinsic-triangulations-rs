@@ -5,8 +5,6 @@
 use ndarray::prelude::*;
 use ndarray::Array;
 use ndarray_linalg::{cholesky::*, Norm};
-// use sprs::CsMat;
-// use sprs_ldl::*;
 use std::collections::VecDeque;
 
 pub type Index = usize;
