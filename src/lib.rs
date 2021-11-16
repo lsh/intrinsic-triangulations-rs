@@ -188,7 +188,7 @@ pub fn build_gluing_map(f: &Array<Index, Ix2>) -> Array<Index, Ix3> {
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    s.sort();
+    s.sort_unstable();
 
     let n_sides = 3 * n_faces(f);
     let mut g = Array::<Index, Ix3>::zeros((n_faces(f), 3, 2));
@@ -202,7 +202,7 @@ pub fn build_gluing_map(f: &Array<Index, Ix2>) -> Array<Index, Ix3> {
         let fs1 = (sp1.2, sp1.3);
         glue_together(&mut g, fs0, fs1);
     }
-    validate_gluing_map(&f, &g);
+    validate_gluing_map(f, &g);
     g
 }
 
@@ -483,8 +483,7 @@ pub fn heat_method_distance_from_vertex(
     let ident = &ll + &ident.map(|i| *i * 1e-6);
     let dist = ident.solvec(&divs).unwrap();
     let k = dist[source_vert];
-    let dist = dist - k;
-    dist
+    dist - k
 }
 
 /// Print some information about the given data.

@@ -1,7 +1,7 @@
 [package]
 name = "intrinsic-triangles"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/lib.rs"
@@ -13,3 +13,8 @@ ndarray = "0.15"
 ndarray-linalg = { version = "0.14", features = ["openblas-system"] }
 
 tobj = "3.2"
+
+
+# visualization
+#pyo3 = {version = "0.15", features = ["auto-initialize"]}
+inline-python = "0.7.1"
